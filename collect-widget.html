@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
+  <style>
+    body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; display: flex; justify-content: center; align-items: center; }
+    
+    #game-window { position: relative; width: 1200px; height: 700px; overflow: hidden; background-color: #000; box-shadow: 0 0 20px rgba(0,0,0,0.8); flex-shrink: 0; }
+    #game-container { position: absolute; inset: 0; background-position: center; background-repeat: no-repeat; }
+    
+    /* Счетчик */
+    #score-board { position: absolute; top: 20px; right: 20px; background: rgba(0,0,0,0.7); border: 2px solid #00bfff; color: white; padding: 10px 20px; border-radius: 10px; font-size: 24px; font-weight: bold; z-index: 90; box-shadow: 0 0 10px rgba(0,191,255,0.5); }
+
+    /* Персонаж (Обертка для координат больше НЕ ИМЕЕТ плавного перехода) */
+    #player-wrapper { position: absolute; width: 80px; height: 80px; transform: translate(-50%, -100%); z-index: 50; pointer-events: none; }
+    #player-animator { width: 100%; height: 100%; }
+    #player-img { width: 100%; height: 100%; object-fit: contain; transform-origin: bottom center; }
+
+    /* --- МАГИЯ ТЕЛЕПОРТА --- */
+    @keyframes teleportOut {
+      0% { transform: scale(1); opacity: 1; filter: brightness(1); }
+      30% { transform: scale(1.2, 0.8); filter: drop-shadow(0 0 15px #00bfff) brightness(1.5); }
+      100% { transform: scale(0.1, 2.5); opacity: 0; filter: drop-shadow(0 0 30px #00bfff) brightness(3); }
+    }
+    @keyframes teleportIn {
+      0% { transform: scale(0.1, 2.5); opacity: 0; filter: drop-shadow(0 0 30px #00bfff) brightness(3); }
+      70% { transform: scale(1.2, 0.8); filter: drop-shadow(0 0 15px #00bfff) brightness(1.5); opacity: 1; }
+      100% { transform: scale(1); opacity: 1; filter: brightness(1); }
+    }
+    .tele-out { animation: teleportOut 0.35s ease-in forwards; }
+    .tele-in { animation: teleportIn 0.35s ease-out forwards; }
+
+    /* Радостный прыжок при победе */
+    @keyframes winBounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-40px); } }
+    .win-anim { animation: winBounce 0.5s infinite; }
+
+    /* Предметы для сбора */
+    .collect-item { position: absolute; width: 70px; height: 70px; transform: translate(-50%, -50%); cursor: pointer; z-index: 40; transition: 0.3s ease; object-fit: contain; filter: drop-shadow(0 0 10px rgba(255,255,255,0.5)); animation: floatItem 3s infinite ease-in-out; }
+    .collect-item:hover { transform: translate(-50%, -50%) scale(1.2); filter: drop-shadow(0 0 20px rgba(255,255,255,0.9)); }
+    @keyframes floatItem { 0%, 100% { margin-top: 0; } 50% { margin-top: -15px; } }
+
+    /* Эффект ошибки над персонажем */
+    .wrong-cross { position: absolute; left: 50%; top: -30px; font-size: 50px; color: #ff3333; transform: translate(-50%, 0); opacity: 0; text-shadow: 0 0 10px #000; font-weight: bold; pointer-events: none; z-index: 60; }
+    @keyframes showCross { 0% { opacity: 1; transform: translate(-50%, 0) scale(0.5); } 50% { transform: translate(-50%, -40px) scale(1.2); } 100% { opacity: 0; transform: translate(-50%, -60px) scale(1); } }
+
+    /* Окна и Модалки */
+    .overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.85); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; color: white; }
+    
+    #question-modal { text-align: center; padding: 40px; background: #1a1f33; border: 2px solid #00bfff; border-radius: 15px; box-shadow: 0 0 30px rgba(0,191,255,0.4); max-width: 80%; transition: 0.1s; }
+    .answers { display: flex; flex-direction: column; gap: 10px; margin-top: 30px; }
+    .answer-btn { padding: 15px; background: #00bfff; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 18px; font-weight: bold; transition: 0.2s; }
+    .answer-btn:hover { background: #008cba; transform: translateY(-2px); }
+
+    /* Тряска при ошибке */
+    @keyframes shake { 0%, 100% { transform: translateX(0); } 20%, 60% { transform: translateX(-15px); } 40%, 80% { transform: translateX(15px); } }
+    .shake-anim { animation: shake 0.4s; border-color: #ff3333 !important; box-shadow: 0 0 30px rgba(255,51,51,0.6) !important; }
+
+    #victory-modal { display: none; text-align: center; }
+    #victory-modal h1 { font-size: 80px; margin: 0; color: gold; text-shadow: 0 0 20px rgba(255,215,0,0.8); }
+  </style>
+</head>
+<body>
+
+  <div id="game-window">
+    <div id="game-container">
+      <div id="player-wrapper">
+        <div class="wrong-cross" id="wrong-cross">❌</div>
+        <div id="player-animator"><img id="player-img" src=""></div>
+      </div>
+    </div>
+    
+    <div id="score-board">Осталось: <span id="items-left">0</span></div>
+
+    <div id="question-overlay" class="overlay" style="display: none; background: rgba(0,0,0,0.7);">
+      <div id="question-modal">
+        <h2 id="q-text" style="margin-top: 0; font-size: 28px;">Вопрос?</h2>
+        <div class="answers" id="q-answers"></div>
+      </div>
+    </div>
+
+    <div id="victory-overlay" class="overlay" style="display: none;">
+      <div id="victory-modal">
+        <h1>Это Победа!</h1>
+        <p style="font-size: 30px; color: #ccc;">Все предметы собраны!</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function resizeGame() {
+      const game = document.getElementById('game-window');
+      const gwW = parseFloat(game.style.width) || 1200;
+      const gwH = parseFloat(game.style.height) || 700;
+      const scale = Math.min(window.innerWidth / gwW, window.innerHeight / gwH);
+      game.style.transform = `scale(${scale})`;
+      game.style.transformOrigin = 'center center';
+    }
+    window.addEventListener('resize', resizeGame);
+
+    let gameData = null;
+    const urlParams = new URLSearchParams(window.location.search);
+    try {
+      const raw = urlParams.get('data');
+      if(raw) gameData = JSON.parse(LZString.decompressFromEncodedURIComponent(raw));
+    } catch(e) { console.error("Ошибка загрузки данных"); }
+
+    if (!gameData) {
+      document.body.innerHTML = "<h2 style='color:white;text-align:center;'>Нет данных для загрузки игры</h2>";
+    } else {
+      initGame(gameData);
+    }
+
+    function initGame(data) {
+      const container = document.getElementById('game-container');
+      const gameWindow = document.getElementById('game-window');
+      const playerWrapper = document.getElementById('player-wrapper');
+      const playerAnimator = document.getElementById('player-animator');
+      const itemsLeftUI = document.getElementById('items-left');
+      
+      let itemsLeft = data.tasks.length;
+      let currentTask = null;
+      let isMoving = false;
+
+      itemsLeftUI.innerText = itemsLeft;
+      document.getElementById('player-img').src = data.char;
+
+      const bgImg = new Image();
+      bgImg.src = data.bg;
+      bgImg.onload = () => {
+        const aspect = bgImg.naturalHeight / bgImg.naturalWidth;
+        const w = 1200, h = 1200 * aspect; 
+        gameWindow.style.width = w + 'px';
+        gameWindow.style.height = h + 'px';
+        container.style.backgroundImage = `url(${data.bg})`;
+        container.style.backgroundSize = '100% 100%';
+        
+        playerWrapper.style.left = `${w / 2}px`;
+        playerWrapper.style.top = `${h - 50}px`;
+        
+        generateItems(w, h);
+        resizeGame(); 
+      };
+
+      function generateItems(maxWidth, maxHeight) {
+        const margin = 80; 
+        const itemSize = 90; 
+        const placedPositions = [];
+
+        data.tasks.forEach((task, index) => {
+          let placed = false;
+          let attempts = 0;
+          let x, y;
+
+          while (!placed && attempts < 200) {
+            x = Math.random() * (maxWidth - margin*2) + margin;
+            y = Math.random() * (maxHeight - margin*2 - 150) + margin;
+            
+            let overlap = placedPositions.some(p => Math.hypot(p.x - x, p.y - y) < itemSize);
+            
+            if (!overlap) {
+              placedPositions.push({x, y});
+              placed = true;
+            }
+            attempts++;
+          }
+
+          const itemEl = document.createElement('img');
+          itemEl.src = data.item;
+          itemEl.className = 'collect-item';
+          itemEl.style.left = `${x}px`;
+          itemEl.style.top = `${y}px`;
+          
+          itemEl.onclick = () => {
+            if (isMoving) return;
+            isMoving = true;
+            
+            // 1. НАЧАЛО ТЕЛЕПОРТА (Исчезновение)
+            playerAnimator.classList.remove('tele-in');
+            playerAnimator.classList.add('tele-out');
+
+            // 2. Ждем пока исчезнет (350мс)
+            setTimeout(() => {
+              // Мгновенно меняем координаты, пока невидим
+              playerWrapper.style.left = `${x}px`;
+              playerWrapper.style.top = `${y + 20}px`; 
+
+              // 3. ПОЯВЛЕНИЕ НА НОВОМ МЕСТЕ
+              playerAnimator.classList.remove('tele-out');
+              playerAnimator.classList.add('tele-in');
+
+              // 4. Показываем вопрос
+              setTimeout(() => {
+                openQuestion(task, itemEl);
+              }, 350);
+            }, 350);
+          };
+          
+          container.appendChild(itemEl);
+        });
+      }
+
+      function openQuestion(task, itemElement) {
+        currentTask = { ...task, element: itemElement };
+        document.getElementById('q-text').innerText = task.question;
+        
+        const ansContainer = document.getElementById('q-answers');
+        ansContainer.innerHTML = '';
+        
+        task.options.forEach(opt => {
+          const btn = document.createElement('button');
+          btn.className = 'answer-btn';
+          btn.innerText = opt;
+          btn.onclick = () => checkAnswer(opt);
+          ansContainer.appendChild(btn);
+        });
+
+        document.getElementById('question-overlay').style.display = 'flex';
+      }
+
+      function checkAnswer(selectedOpt) {
+        if (selectedOpt === currentTask.correct) { // Исправлена опечатка тут!
+          document.getElementById('question-overlay').style.display = 'none';
+          
+          currentTask.element.style.transform = 'translate(-50%, -50%) scale(0)';
+          currentTask.element.style.opacity = '0';
+          setTimeout(() => currentTask.element.remove(), 300);
+
+          itemsLeft--;
+          itemsLeftUI.innerText = itemsLeft;
+          isMoving = false;
+
+          if (itemsLeft === 0) {
+            setTimeout(() => {
+              // Радостно подпрыгивает на месте в конце
+              playerAnimator.classList.add('win-anim');
+              document.getElementById('victory-overlay').style.display = 'flex';
+              document.getElementById('victory-modal').style.display = 'block';
+            }, 500);
+          }
+        } else {
+          const modal = document.getElementById('question-modal');
+          const cross = document.getElementById('wrong-cross');
+          
+          modal.classList.add('shake-anim');
+          setTimeout(() => modal.classList.remove('shake-anim'), 400);
+
+          cross.style.animation = 'none';
+          void cross.offsetWidth; 
+          cross.style.animation = 'showCross 1.5s forwards';
+
+          setTimeout(() => {
+            document.getElementById('question-overlay').style.display = 'none';
+            isMoving = false; // Отпускаем блокировку, можно кликать дальше
+          }, 800);
+        }
+      }
+    }
+  </script>
+</body>
+</html>
