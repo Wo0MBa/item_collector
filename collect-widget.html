@@ -6,18 +6,19 @@
   <style>
     body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; display: flex; justify-content: center; align-items: center; }
     
+    /* Статичное окно 1200x700. Фон теперь cover! */
     #game-window { position: relative; width: 1200px; height: 700px; overflow: hidden; background-color: #000; box-shadow: 0 0 20px rgba(0,0,0,0.8); flex-shrink: 0; }
-    #game-container { position: absolute; inset: 0; background-position: center; background-repeat: no-repeat; }
+    #game-container { position: absolute; inset: 0; background-position: center; background-size: cover; background-repeat: no-repeat; }
     
     /* Счетчик */
     #score-board { position: absolute; top: 20px; right: 20px; background: rgba(0,0,0,0.7); border: 2px solid #00bfff; color: white; padding: 10px 20px; border-radius: 10px; font-size: 24px; font-weight: bold; z-index: 90; box-shadow: 0 0 10px rgba(0,191,255,0.5); }
 
-    /* Персонаж (Обертка для координат больше НЕ ИМЕЕТ плавного перехода) */
+    /* Персонаж */
     #player-wrapper { position: absolute; width: 80px; height: 80px; transform: translate(-50%, -100%); z-index: 50; pointer-events: none; }
     #player-animator { width: 100%; height: 100%; }
     #player-img { width: 100%; height: 100%; object-fit: contain; transform-origin: bottom center; }
 
-    /* --- МАГИЯ ТЕЛЕПОРТА --- */
+    /* Эффекты телепортации */
     @keyframes teleportOut {
       0% { transform: scale(1); opacity: 1; filter: brightness(1); }
       30% { transform: scale(1.2, 0.8); filter: drop-shadow(0 0 15px #00bfff) brightness(1.5); }
@@ -35,12 +36,12 @@
     @keyframes winBounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-40px); } }
     .win-anim { animation: winBounce 0.5s infinite; }
 
-    /* Предметы для сбора */
-    .collect-item { position: absolute; width: 70px; height: 70px; transform: translate(-50%, -50%); cursor: pointer; z-index: 40; transition: 0.3s ease; object-fit: contain; filter: drop-shadow(0 0 10px rgba(255,255,255,0.5)); animation: floatItem 3s infinite ease-in-out; }
-    .collect-item:hover { transform: translate(-50%, -50%) scale(1.2); filter: drop-shadow(0 0 20px rgba(255,255,255,0.9)); }
+    /* Предметы (размер будет переопределяться через JS) */
+    .collect-item { position: absolute; transform: translate(-50%, -50%); cursor: pointer; z-index: 40; transition: 0.3s ease; object-fit: contain; filter: drop-shadow(0 0 10px rgba(255,255,255,0.5)); animation: floatItem 3s infinite ease-in-out; }
+    .collect-item:hover { filter: drop-shadow(0 0 20px rgba(255,255,255,0.9)) brightness(1.2); }
     @keyframes floatItem { 0%, 100% { margin-top: 0; } 50% { margin-top: -15px; } }
 
-    /* Эффект ошибки над персонажем */
+    /* Ошибка (крестик) */
     .wrong-cross { position: absolute; left: 50%; top: -30px; font-size: 50px; color: #ff3333; transform: translate(-50%, 0); opacity: 0; text-shadow: 0 0 10px #000; font-weight: bold; pointer-events: none; z-index: 60; }
     @keyframes showCross { 0% { opacity: 1; transform: translate(-50%, 0) scale(0.5); } 50% { transform: translate(-50%, -40px) scale(1.2); } 100% { opacity: 0; transform: translate(-50%, -60px) scale(1); } }
 
@@ -90,8 +91,8 @@
   <script>
     function resizeGame() {
       const game = document.getElementById('game-window');
-      const gwW = parseFloat(game.style.width) || 1200;
-      const gwH = parseFloat(game.style.height) || 700;
+      const gwW = 1200;
+      const gwH = 700;
       const scale = Math.min(window.innerWidth / gwW, window.innerHeight / gwH);
       game.style.transform = `scale(${scale})`;
       game.style.transformOrigin = 'center center';
@@ -113,38 +114,38 @@
 
     function initGame(data) {
       const container = document.getElementById('game-container');
-      const gameWindow = document.getElementById('game-window');
       const playerWrapper = document.getElementById('player-wrapper');
       const playerAnimator = document.getElementById('player-animator');
       const itemsLeftUI = document.getElementById('items-left');
+      const playerImg = document.getElementById('player-img');
       
       let itemsLeft = data.tasks.length;
       let currentTask = null;
       let isMoving = false;
 
       itemsLeftUI.innerText = itemsLeft;
-      document.getElementById('player-img').src = data.char;
+      
+      // Устанавливаем картинку персонажа и его размер
+      playerImg.src = data.char;
+      const cScale = data.charScale || 1;
+      playerImg.style.transform = `scale(${cScale})`;
 
-      const bgImg = new Image();
-      bgImg.src = data.bg;
-      bgImg.onload = () => {
-        const aspect = bgImg.naturalHeight / bgImg.naturalWidth;
-        const w = 1200, h = 1200 * aspect; 
-        gameWindow.style.width = w + 'px';
-        gameWindow.style.height = h + 'px';
-        container.style.backgroundImage = `url(${data.bg})`;
-        container.style.backgroundSize = '100% 100%';
-        
-        playerWrapper.style.left = `${w / 2}px`;
-        playerWrapper.style.top = `${h - 50}px`;
-        
-        generateItems(w, h);
-        resizeGame(); 
-      };
+      // Жестко фиксируем игровое поле 1200x700
+      const w = 1200, h = 700; 
+      container.style.backgroundImage = `url(${data.bg})`;
+      
+      playerWrapper.style.left = `${w / 2}px`;
+      playerWrapper.style.top = `${h - 50}px`;
+      
+      generateItems(w, h);
+      resizeGame(); 
 
       function generateItems(maxWidth, maxHeight) {
-        const margin = 80; 
-        const itemSize = 90; 
+        const itemScale = data.itemScale || 1;
+        const itemVisualSize = 70 * itemScale; // Физический размер картинки на экране
+        const margin = 50 + (itemVisualSize / 2); // Отступы от краев экрана
+        const itemSafeZone = itemVisualSize + 30; // Безопасная дистанция между предметами (чтобы не слипались)
+        
         const placedPositions = [];
 
         data.tasks.forEach((task, index) => {
@@ -154,9 +155,9 @@
 
           while (!placed && attempts < 200) {
             x = Math.random() * (maxWidth - margin*2) + margin;
-            y = Math.random() * (maxHeight - margin*2 - 150) + margin;
+            y = Math.random() * (maxHeight - margin*2 - 150) + margin; // 150px снизу свободно для спавна
             
-            let overlap = placedPositions.some(p => Math.hypot(p.x - x, p.y - y) < itemSize);
+            let overlap = placedPositions.some(p => Math.hypot(p.x - x, p.y - y) < itemSafeZone);
             
             if (!overlap) {
               placedPositions.push({x, y});
@@ -168,6 +169,8 @@
           const itemEl = document.createElement('img');
           itemEl.src = data.item;
           itemEl.className = 'collect-item';
+          itemEl.style.width = `${itemVisualSize}px`;
+          itemEl.style.height = `${itemVisualSize}px`;
           itemEl.style.left = `${x}px`;
           itemEl.style.top = `${y}px`;
           
@@ -175,21 +178,19 @@
             if (isMoving) return;
             isMoving = true;
             
-            // 1. НАЧАЛО ТЕЛЕПОРТА (Исчезновение)
+            // Телепорт: Исчезновение
             playerAnimator.classList.remove('tele-in');
             playerAnimator.classList.add('tele-out');
 
-            // 2. Ждем пока исчезнет (350мс)
             setTimeout(() => {
-              // Мгновенно меняем координаты, пока невидим
+              // Мгновенная смена координат
               playerWrapper.style.left = `${x}px`;
-              playerWrapper.style.top = `${y + 20}px`; 
+              playerWrapper.style.top = `${y + (20 * cScale)}px`; 
 
-              // 3. ПОЯВЛЕНИЕ НА НОВОМ МЕСТЕ
+              // Телепорт: Появление
               playerAnimator.classList.remove('tele-out');
               playerAnimator.classList.add('tele-in');
 
-              // 4. Показываем вопрос
               setTimeout(() => {
                 openQuestion(task, itemEl);
               }, 350);
@@ -219,7 +220,7 @@
       }
 
       function checkAnswer(selectedOpt) {
-        if (selectedOpt === currentTask.correct) { // Исправлена опечатка тут!
+        if (selectedOpt === currentTask.correct) {
           document.getElementById('question-overlay').style.display = 'none';
           
           currentTask.element.style.transform = 'translate(-50%, -50%) scale(0)';
@@ -232,7 +233,6 @@
 
           if (itemsLeft === 0) {
             setTimeout(() => {
-              // Радостно подпрыгивает на месте в конце
               playerAnimator.classList.add('win-anim');
               document.getElementById('victory-overlay').style.display = 'flex';
               document.getElementById('victory-modal').style.display = 'block';
@@ -251,7 +251,7 @@
 
           setTimeout(() => {
             document.getElementById('question-overlay').style.display = 'none';
-            isMoving = false; // Отпускаем блокировку, можно кликать дальше
+            isMoving = false;
           }, 800);
         }
       }
