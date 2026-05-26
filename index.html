@@ -12,7 +12,10 @@
     .section-header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 1px solid #333; padding-bottom: 10px; margin-top: 30px; margin-bottom: 15px; }
     .section-header h3 { margin: 0; }
     
-    input[type="url"], input[type="text"] { width: 100%; margin-bottom: 10px; padding: 12px; border-radius: 8px; border: 1px solid #00bfff; background: rgba(0,0,0,0.3); color: white; box-sizing: border-box; }
+    input[type="url"], input[type="text"], select { width: 100%; margin-bottom: 10px; padding: 12px; border-radius: 8px; border: 1px solid #00bfff; background: rgba(0,0,0,0.3); color: white; box-sizing: border-box; }
+    select { cursor: pointer; }
+    select option { background: #0c1427; color: white; }
+    
     button { background: #00bfff; color: white; padding: 12px; cursor: pointer; font-weight: bold; border: none; border-radius: 8px; transition: 0.3s; width: 100%; }
     button:hover { background: #008cba; }
     
@@ -34,8 +37,27 @@
     <div class="section-header"><h3>1. Настройки графики</h3></div>
     <p style="color: #aaa; margin-top: 0; font-size: 14px;">Ссылки на изображения (с прозрачным фоном для персонажа и предмета).</p>
     <input type="url" id="bg-url" placeholder="URL Фона (например, комната или поляна)">
-    <input type="url" id="char-url" placeholder="URL Персонажа">
-    <input type="url" id="item-url" placeholder="URL Предмета для сбора (яблоко, монета и т.д.)">
+    
+    <div style="display: flex; gap: 10px;">
+      <input type="url" id="char-url" placeholder="URL Персонажа">
+      <select id="char-scale" style="width: 40%;">
+        <option value="1">Размер героя: 1x</option>
+        <option value="1.5">Размер героя: 1.5x</option>
+        <option value="2">Размер героя: 2x</option>
+        <option value="2.5">Размер героя: 2.5x</option>
+        <option value="3">Размер героя: 3x</option>
+      </select>
+    </div>
+
+    <div style="display: flex; gap: 10px;">
+      <input type="url" id="item-url" placeholder="URL Предмета (яблоко, монета)">
+      <select id="item-scale" style="width: 40%;">
+        <option value="1">Размер предмета: 1x</option>
+        <option value="1.2">Размер предмета: 1.2x</option>
+        <option value="1.5">Размер предмета: 1.5x</option>
+        <option value="2">Размер предмета: 2x</option>
+      </select>
+    </div>
 
     <div class="section-header">
       <h3>2. Задания</h3>
@@ -51,7 +73,7 @@
   </div>
 
   <script>
-    let gameData = { bg: '', char: '', item: '', tasks: [] };
+    let gameData = { bg: '', char: '', item: '', charScale: 1, itemScale: 1, tasks: [] };
     let taskCounter = 0;
     const tasksPanel = document.getElementById('tasks-panel');
 
@@ -83,7 +105,6 @@
       updateNumbers();
     }
 
-    // Создаем 3 задания для старта
     createTaskForm(); createTaskForm(); createTaskForm();
 
     document.getElementById('add-task-btn').addEventListener('click', createTaskForm);
@@ -114,10 +135,11 @@
     }
 
     document.getElementById('generate-btn').addEventListener('click', () => {
-      // Дефолтные картинки, если пользователь ничего не ввел
       gameData.bg = document.getElementById('bg-url').value || 'https://images.unsplash.com/photo-1550684848-fac1c5b4e853?w=1200';
       gameData.char = document.getElementById('char-url').value || 'https://cdn-icons-png.flaticon.com/128/104/104663.png';
-      gameData.item = document.getElementById('item-url').value || 'https://cdn-icons-png.flaticon.com/128/184/184390.png'; // Яблоко по умолчанию
+      gameData.item = document.getElementById('item-url').value || 'https://cdn-icons-png.flaticon.com/128/184/184390.png';
+      gameData.charScale = parseFloat(document.getElementById('char-scale').value);
+      gameData.itemScale = parseFloat(document.getElementById('item-scale').value);
       
       gameData.tasks = [];
       let formsValid = true;
@@ -128,7 +150,7 @@
         let options = Array.from(form.querySelectorAll('.task-opt')).map(input => input.value.trim()).filter(Boolean);
 
         if (correct && !options.includes(correct)) options.push(correct);
-        options.sort(() => Math.random() - 0.5); // Перемешиваем ответы
+        options.sort(() => Math.random() - 0.5);
 
         if (!q || !correct || options.length < 2) formsValid = false;
 
@@ -138,7 +160,6 @@
       if (gameData.tasks.length === 0) return alert('Добавьте хотя бы одно задание!');
       if (!formsValid) return alert('Заполните все поля! Вопрос, правильный ответ и минимум 1 неправильный.');
 
-      // Сжимаем
       const compressedData = LZString.compressToEncodedURIComponent(JSON.stringify(gameData));
       const currentUrl = window.location.href.replace(/\/[^\/]*$/, '/');
       const widgetUrl = `${currentUrl}collect-widget.html?data=${compressedData}`;
