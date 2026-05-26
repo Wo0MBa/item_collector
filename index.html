@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Генератор: Сбор предметов</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
+  <style>
+    body { font-family: 'Segoe UI', sans-serif; background: #0c1427; color: #e0e0e0; padding: 20px; }
+    .container { max-width: 900px; margin: 0 auto; background: rgba(0, 0, 0, 0.8); padding: 20px; border-radius: 15px; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+    h1 { color: #00bfff; text-align: center; }
+    .section-header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 1px solid #333; padding-bottom: 10px; margin-top: 30px; margin-bottom: 15px; }
+    .section-header h3 { margin: 0; }
+    
+    input[type="url"], input[type="text"] { width: 100%; margin-bottom: 10px; padding: 12px; border-radius: 8px; border: 1px solid #00bfff; background: rgba(0,0,0,0.3); color: white; box-sizing: border-box; }
+    button { background: #00bfff; color: white; padding: 12px; cursor: pointer; font-weight: bold; border: none; border-radius: 8px; transition: 0.3s; width: 100%; }
+    button:hover { background: #008cba; }
+    
+    #tasks-panel { display: flex; flex-direction: column; gap: 15px; }
+    .task-card { background: rgba(0, 191, 255, 0.1); border: 1px solid #00bfff; padding: 15px; border-radius: 8px; position: relative; padding-top: 35px; }
+    .task-badge { position: absolute; top: -10px; left: -10px; background: gold; color: black; width: 30px; height: 30px; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-weight: bold; }
+    
+    .delete-task-btn { position: absolute; top: 10px; right: 10px; width: 35px; height: 35px; padding: 0; background: #dc3545; color: white; border-radius: 5px; font-size: 16px; cursor: pointer; border: none; }
+    .opt-wrapper { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
+    .opt-wrapper input { flex: 1; margin-bottom: 0 !important; }
+    .delete-opt-btn { width: 44px; height: 44px; background: #dc3545; color: white; border-radius: 8px; font-size: 16px; cursor: pointer; border: none; flex-shrink: 0; }
+    .add-opt-btn { background: transparent; border: 1px dashed #00bfff; color: #00bfff; padding: 8px; margin-bottom: 15px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Генератор: Сбор предметов</h1>
+    
+    <div class="section-header"><h3>1. Настройки графики</h3></div>
+    <p style="color: #aaa; margin-top: 0; font-size: 14px;">Ссылки на изображения (с прозрачным фоном для персонажа и предмета).</p>
+    <input type="url" id="bg-url" placeholder="URL Фона (например, комната или поляна)">
+    <input type="url" id="char-url" placeholder="URL Персонажа">
+    <input type="url" id="item-url" placeholder="URL Предмета для сбора (яблоко, монета и т.д.)">
+
+    <div class="section-header">
+      <h3>2. Задания</h3>
+      <button id="add-task-btn" style="width: auto; padding: 6px 15px; background: #28a745; margin: 0; font-size: 14px;">+ Добавить задание</button>
+    </div>
+    <p style="color: #aaa; margin-top: 0; font-size: 14px;">Каждое задание — это 1 предмет, который появится на экране.</p>
+    
+    <div id="tasks-panel"></div>
+
+    <div class="section-header"><h3>3. Финал</h3></div>
+    <button id="generate-btn" style="background: #00cc66; padding: 15px; font-size: 18px;">Сгенерировать код для Genially</button>
+    <textarea id="iframe-code" rows="5" readonly style="margin-top: 15px; font-family: monospace;"></textarea>
+  </div>
+
+  <script>
+    let gameData = { bg: '', char: '', item: '', tasks: [] };
+    let taskCounter = 0;
+    const tasksPanel = document.getElementById('tasks-panel');
+
+    function createTaskForm() {
+      taskCounter++;
+      const id = taskCounter;
+      const card = document.createElement('div');
+      card.className = 'task-card';
+      card.id = `task-form-${id}`;
+      
+      card.innerHTML = `
+        <div class="task-badge">${id}</div>
+        <button type="button" class="delete-task-btn" data-id="${id}">✖</button>
+        <input type="text" class="task-q" placeholder="Текст вопроса (например: 2 + 2 = ?)">
+        <div class="opts-container" id="opts-${id}">
+          <div class="opt-wrapper">
+            <input type="text" class="task-opt" placeholder="Неправильный вариант 1">
+            <button type="button" class="delete-opt-btn">✖</button>
+          </div>
+          <div class="opt-wrapper">
+            <input type="text" class="task-opt" placeholder="Неправильный вариант 2">
+            <button type="button" class="delete-opt-btn">✖</button>
+          </div>
+        </div>
+        <button type="button" class="add-opt-btn" data-id="${id}">+ Добавить вариант ответа</button>
+        <input type="text" class="task-correct" placeholder="ПРАВИЛЬНЫЙ вариант ответа" style="border-color: #00ff00; background: rgba(0, 255, 0, 0.1);">
+      `;
+      tasksPanel.appendChild(card);
+      updateNumbers();
+    }
+
+    // Создаем 3 задания для старта
+    createTaskForm(); createTaskForm(); createTaskForm();
+
+    document.getElementById('add-task-btn').addEventListener('click', createTaskForm);
+
+    tasksPanel.addEventListener('click', (e) => {
+      if (e.target.classList.contains('delete-task-btn')) {
+        const id = parseInt(e.target.getAttribute('data-id'));
+        document.getElementById(`task-form-${id}`).remove();
+        updateNumbers();
+      }
+      if (e.target.classList.contains('delete-opt-btn')) {
+        e.target.closest('.opt-wrapper').remove();
+      }
+      if (e.target.classList.contains('add-opt-btn')) {
+        const id = e.target.getAttribute('data-id');
+        const container = document.getElementById(`opts-${id}`);
+        const w = document.createElement('div');
+        w.className = 'opt-wrapper';
+        w.innerHTML = `<input type="text" class="task-opt" placeholder="Еще вариант"><button type="button" class="delete-opt-btn">✖</button>`;
+        container.appendChild(w);
+      }
+    });
+
+    function updateNumbers() {
+      document.querySelectorAll('.task-card').forEach((card, index) => {
+        card.querySelector('.task-badge').innerText = index + 1;
+      });
+    }
+
+    document.getElementById('generate-btn').addEventListener('click', () => {
+      // Дефолтные картинки, если пользователь ничего не ввел
+      gameData.bg = document.getElementById('bg-url').value || 'https://images.unsplash.com/photo-1550684848-fac1c5b4e853?w=1200';
+      gameData.char = document.getElementById('char-url').value || 'https://cdn-icons-png.flaticon.com/128/104/104663.png';
+      gameData.item = document.getElementById('item-url').value || 'https://cdn-icons-png.flaticon.com/128/184/184390.png'; // Яблоко по умолчанию
+      
+      gameData.tasks = [];
+      let formsValid = true;
+
+      document.querySelectorAll('.task-card').forEach((form) => {
+        const q = form.querySelector('.task-q').value.trim();
+        const correct = form.querySelector('.task-correct').value.trim();
+        let options = Array.from(form.querySelectorAll('.task-opt')).map(input => input.value.trim()).filter(Boolean);
+
+        if (correct && !options.includes(correct)) options.push(correct);
+        options.sort(() => Math.random() - 0.5); // Перемешиваем ответы
+
+        if (!q || !correct || options.length < 2) formsValid = false;
+
+        gameData.tasks.push({ question: q, correct: correct, options: options });
+      });
+
+      if (gameData.tasks.length === 0) return alert('Добавьте хотя бы одно задание!');
+      if (!formsValid) return alert('Заполните все поля! Вопрос, правильный ответ и минимум 1 неправильный.');
+
+      // Сжимаем
+      const compressedData = LZString.compressToEncodedURIComponent(JSON.stringify(gameData));
+      const currentUrl = window.location.href.replace(/\/[^\/]*$/, '/');
+      const widgetUrl = `${currentUrl}collect-widget.html?data=${compressedData}`;
+      
+      const iframeStr = `<iframe src="${widgetUrl}" width="100%" height="600" frameborder="0" allowfullscreen></iframe>`;
+      document.getElementById('iframe-code').value = iframeStr;
+      navigator.clipboard.writeText(iframeStr);
+      
+      const btn = document.getElementById('generate-btn');
+      btn.innerText = '✅ Код скопирован!';
+      setTimeout(() => btn.innerText = 'Сгенерировать код для Genially', 2000);
+    });
+  </script>
+</body>
+</html>
